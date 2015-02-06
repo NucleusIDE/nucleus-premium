@@ -18,7 +18,7 @@ Package.on_use(function (api, where) {
            'nucleuside:smart-models@0.0.6',
            'nucleuside:live-update@0.1.1',
            'mizzao:sharejs@0.6.1',
-           'nucleuside:terminal@0.1.0',
+           'nucleuside:terminal@0.1.1',
            'mrt:flash-messages@0.2.4',
       'iron:router@0.9.0 || 1.0.0']);
 
@@ -85,6 +85,7 @@ Package.on_use(function (api, where) {
   ], 'client', {isAsset: true});
 
   api.add_files([
+    'server/premium_crasher.js',
     'server/git_operations.js',
     'server/crash_watcher.js',
     'server/nucleus.js',
