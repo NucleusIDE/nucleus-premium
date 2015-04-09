@@ -84,7 +84,6 @@ var NucleusFactory = function() {
     //this.nucleusCloneRepo();
     this.Deploy = new DeployManager();
 
-
     if(this.config.preventAppCrashes)
       CrashWatcher.initialize();
   };
