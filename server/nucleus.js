@@ -4,9 +4,8 @@
 
 Meteor.startup(function() {
   Nucleus.initialize({
-
-      preventAppCrashes: false
-    });
+    preventAppCrashes: false
+  });
 });
 
 fs = Npm.require('fs'),
@@ -18,14 +17,37 @@ Future = Npm.require('fibers/future');
 /**
  It defines `Nucleus` on server and provide all needed methods for interacting with the filesystem on server like getting cloning the git url, saving file, getting file  contents for editing etc. Most of the methods here are synchronous. I don't exactly remember what the issue was for which I chose synchronous over async. My initial approach was to use async flow in here, but I opted for sync shortly after starting.
  */
-NucleusFactory = function() {
+var NucleusFactory = function() {
   var homeDir = process.env.HOME,
-      nucleusDir = path.join(homeDir, ".nucleus");
+      nucleusDir = path.join(homeDir, ".nucleus"),
+      self = this;
 
   this.config = {
     git: '',
     project: '',
-    preventAppCrashes: true
+    preventAppCrashes: true,
+    terminalInitialized: false,
+    user: null,
+    password: null
+  };
+
+  this.Terminal = {};
+  this.Terminal.configure = function(options) {
+    var terminalUsername = options.user,
+        terminalPassword = options.password;
+
+    if (!terminalUsername || ! terminalPassword) {
+      self.config.terminalInitialized = false;
+      return;
+    }
+
+    //Setup terminal. Terminal starts a different server protected by username and password given below.
+    NucleusTerminal.initialize({
+      username: terminalUsername,
+      password: terminalPassword
+    });
+
+    self.config.terminalInitialized = true;
   };
 
   this.getFileExtension = function (filepath) {
@@ -35,25 +57,37 @@ NucleusFactory = function() {
 
   // Configure Nucleus on server. Following options are accepted for configuration:
   // * git :     Remote git url
-  // * project:  Name of the project. A folder with this name is created in `Nucleus.config.projectDir` ('~/.nucleus') and `Nucleus.config.git` url is cloned in it.
-  // It also sets the `Nucleus.config.projectDir` which is not configurable by user.
+  // * project:  Name of the project
 
   this.configure = function(config) {
     _.extend(Nucleus.config, config);
 
-  Nucleus.config.projectDir = process.env.PWD;
+    Nucleus.config.projectDir = process.env.PWD;
 
-  var pathParts = process.env.PWD.split('/');
-  Nucleus.config.project = pathParts[pathParts.length - 1];
+    var pathParts = process.env.PWD.split('/');
+    Nucleus.config.project = pathParts[pathParts.length - 1];
+    //Nucleus.config.projectDir = path.join(homeDir, ".nucleus/",Nucleus.config.project);
 
-  console.log('Project DIR: ' + Nucleus.config.projectDir);
-  //Nucleus.config.projectDir = path.join(homeDir, ".nucleus/",Nucleus.config.project);
+    var user = Nucleus.config.user,
+        password = Nucleus.config.password;
+
+    if (user && password) {
+      var basicAuth = new HttpBasicAuth(user, password);
+      basicAuth.protect();
+
+      this.Terminal.configure({user: user, password: password});
+    } else {
+      console.warn("Make sure you have set user/password for first line of fire protection");
+      console.warn("Nucleus.configure({user: 'username', password: 'password'})");
+    }
   };
 
   //This method is called on nucleus initialization on the server (in the app).
   this.initialize = function(config) {
     config && this.configure(config);
+
     //this.nucleusCloneRepo();
+    this.Deploy = new DeployManager();
     if(this.config.preventAppCrashes)
       CrashWatcher.initialize();
   };
@@ -67,7 +101,7 @@ NucleusFactory = function() {
   this.getDirTree = function(options) {
     options = options || {};
     var  dirTree= function (options) {
-      var filename = options.rootDir || Nucleus.config.projectDir,
+      var filename = options.rootDir.trim() || Nucleus.config.projectDir.trim(),
           parent = options.parent || "#",
           traverseSymlinks = options.traverseSymlinks || false,
           includeHidden = options.includeHidden || false,
@@ -227,65 +261,6 @@ NucleusFactory = function() {
     //      this.pullChanges(projectDir);
   };
 
-  //This method is obsolete. We use this method to get the latest CSS from the filesystem, and manually push it into the app. But since we have started running meteor in dev mode on the nucleus server, it is no longer needed as meteor itself live-push all the CSS. Note that this method is faster than meteor's, but it won't load packages'
-  this.getAllCSS = function(options) {
-    var tree = this.getDirTree(),
-        packagesToInclude = options && options.packagesToInclude,
-        cssFiles = [],
-        collectedCss = '';
-
-    var collectCSSFiles = function(filetree) {
-      if (filetree.name.indexOf(".") !== 0) {
-        if (path.extname(filetree.path).replace(".", "") === 'css')
-          cssFiles.push(filetree.path);
-
-        _.each(filetree.children, function(node) {
-          collectCSSFiles(node);
-        });
-      }
-    };
-    var collectCSSFilesFromPackages = function(packages) {
-      packages = packages || [];
-      _.each(packages, function(package) {
-        var packageDir = path.join(this.config.projectDir, "packages/"+package);
-        var tree = this.getDirTree({rootDir: packageDir, parent: "#", traverseSymlinks: true});
-        collectCSSFiles(tree);
-      }.bind(this));
-    }.bind(this);
-
-    collectCSSFilesFromPackages(packagesToInclude);
-    collectCSSFiles(tree); //populates cssFiles with filepath of all CSS files
-
-    //TODO: make this better and more meteor like
-    _.each(cssFiles, function(cssfile) {
-      var contents = this.getFileContents(cssfile);
-      console.log("FETCHING : ", cssfile);
-      collectedCss += contents;
-    }.bind(this));
-
-
-    return collectedCss;
-  };
-
-  //Let's keep mup deploy here until we have a clear/bigger deployment strategy
-  this.mupDeploy = function(mup_setup) {
-    var projectDir = this.config.projectDir;
-    var fut = new Future();
-
-    var commmand = "cd " + projectDir + (mup_setup ? " && mup setup " : "")  + " && mup deploy";
-
-    child.exec(command, function(err, stdout, stderr) {
-      if (err) {console.log(err); fut.return(-1); }
-      else {
-        fut.return(1);
-
-        console.log("STDOUT:", stdout);
-        console.log("STDERR", stderr);
-      }
-    });
-    return fut.wait();
-  };
-
   //Create a new file on the server
   //
   //Arguments:
@@ -338,8 +313,13 @@ NucleusFactory = function() {
       child.exec("rm -rf "+filepath, function(err, res) {
         fut.return(res);
       });
-    else
+    else {
       fut.return(fs.unlinkSync(filepath));
+      var nucDoc = NucleusDocuments.findOne({filepath: filepath});
+      var shareJsDocId = nucDoc ? nucDoc.doc_id : null;
+      NucleusDocuments.remove({_id: nucDoc._id});
+      ShareJsDocs.remove({_id: shareJsDocId});
+    }
 
     return fut.wait();
   };
@@ -350,20 +330,12 @@ NucleusFactory = function() {
       return false;;
     }
 
-    return fs.renameSync(oldpath, newpath);
+    var renameFileOp = fs.renameSync(oldpath, newpath);
+    NucleusDocuments.update({filepath: oldpath}, {$set: {filepath: newpath}});
+
+    return true;
   };
-
 };
-
-//Publishes all the collections required by nucleus with no limits or checks
-Meteor.publish("nucleusPublisher",function() {
-  return [
-    NucleusDocuments.find({}),
-    ShareJsDocs.find({}),
-    NucleusUsers.find({}),
-    NucleusEvents.find({})
-  ];
-});
 
 //Creat server side global `Nucleus` using the above constructor
 Nucleus = new NucleusFactory();

@@ -8,19 +8,39 @@ Package.describe({
 
 Npm.depends({
   'fibers': '1.0.2',
+  'github-oauth': '0.2.1',
+  'mup': '0.9.7',
   'nucleus-watch-meteor': 'https://github.com/NucleusIDE/nucleus-watch-meteor/archive/f3716eaa97ef7fbe6959f216d5d6490b29667f7c.tar.gz'
 });
 
 Package.on_use(function (api, where) {
   api.versionsFrom("METEOR@0.9.1");
   api.use(['ui', 'spacebars','blaze', 'jquery', 'deps', 'templating', 'underscore', 'session',
+           'reactive-var',
            'mrt:moment@2.8.1',
            'nucleuside:smart-models@0.0.6',
            'nucleuside:live-update@0.1.1',
            'mizzao:sharejs@0.6.1',
            'nucleuside:terminal@0.1.1',
            'mrt:flash-messages@0.2.4',
-      'iron:router@0.9.0 || 1.0.0']);
+           'aldeed:autoform@4.0.0',
+           'kevohagan:ramda@0.13.0',
+           'iron:router@0.9.0 || 1.0.0']);
+  api.imply([
+    'reactive-var',
+    'kevohagan:ramda@0.13.0',
+    'aldeed:autoform@4.0.0'
+  ]);
+
+
+  //Add core nucleus plugin files
+  //It is safe to put them here because these are actually executed only after NucleusClient is initialized
+  api.add_files([
+    'client/plugins/NucleusClient.kbd.js',
+    'client/plugins/master-prompt.js',
+    'client/plugins/fuzzy-find-file.js',
+    'client/plugins/nucleus-terminal.js',
+  ], 'client');
 
   api.add_files([
     'public/logo.png',
@@ -32,6 +52,7 @@ Package.on_use(function (api, where) {
 
   api.add_files([
     'both/nucleus_global.js',
+    'both/deploy.js',
     'both/utilities.js',
     'both/collections.js',
     'chat/both/chat_model.js',
@@ -47,10 +68,13 @@ Package.on_use(function (api, where) {
     'client/lib/font-awesome/css/font-awesome.css',
     'client/lib/hint.css',
 
-    'client/nucleus_client.js',
+    'client/plugin-manager.js',
+
     'client/nucleus_editor.js',
+    'client/nucleus_client.js',
     'client/nucleus_sidebar.js',
-  'client/keepalive.js',
+    'client/keepalive.js',
+    'client/startup.js',
 
     'client/template.css',
     'client/template.html',
@@ -86,6 +110,8 @@ Package.on_use(function (api, where) {
 
   api.add_files([
     'server/premium_crasher.js',
+    'server/publishers.js',
+    'server/login-routes.js',
     'server/git_operations.js',
     'server/crash_watcher.js',
     'server/nucleus.js',
@@ -94,6 +120,7 @@ Package.on_use(function (api, where) {
     'server/permissions.js',
     'chat/server/publishers.js'
   ], ['server']);
+
 
   api.export && api.export(['NucleusUser', 'NucleusGlobal'], ['server', 'client']);
   api.export && api.export(['Nucleus', 'NucleusGit'], ['server']);

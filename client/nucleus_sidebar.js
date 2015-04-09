@@ -13,6 +13,7 @@ NucleusSidebar = {
    */
   redrawJsTree: function(elemId) {
     $("#"+elemId).html(NucleusClient.getJstreeHTML());
+    NucleusClient.jsTree.redraw(true); return;
     NucleusClient.jsTree.destroy(true);
 
     var treeInterval = Meteor.setInterval(function() {
@@ -50,7 +51,8 @@ NucleusSidebar = {
       //     NucleusClient.jsTree.open_node(data.node);
       //   }
       // }
-      if(data.node.data.type === 'file') {
+      var nodeType = data.node.data.type || document.getElementById(data.node.id).getAttribute('data-type');
+      if(nodeType === 'file') {
         Session.set("nucleus_selected_file", data.selected[0]);
       }
     });
@@ -70,7 +72,8 @@ NucleusSidebar = {
             var oldpath = node.id;
             var path = node.id.split("/");
             path.splice(-1);
-            var newpath = path.join("/")+"/"+newname;
+            var newpath = (path.join("/") + "/" + newname).trim(),
+                oldNodeType = node.data ? node.data.type : null;
 
             NucleusClient.renameFile(oldpath, newpath, function(err, res) {
               if (err) {
@@ -79,6 +82,14 @@ NucleusSidebar = {
               }
               FlashMessages.sendSuccess("File Renamed successfully.");
               NucleusClient.jsTree.set_id(node, newpath);
+              document.getElementById(node.id).setAttribute('data-type', oldNodeType);
+              node.data = node.data || {};
+              node.data.type = oldNodeType;
+
+              if (oldNodeType === 'file') {
+                NucleusClient.editFile(newpath);
+                NucleusClient.Editor.setModeForExt(Utils.getExt(newpath));
+              }
             });
           }
 
@@ -96,16 +107,16 @@ NucleusSidebar = {
         select_node: false,
         items : {
           "create" : {
-            "separator_before"	: false,
-            "separator_after"	: true,
-            "_disabled"			: false, //(this.check("create_node", data.reference, {}, "last")),
-            "label"				: "New",
+            "separator_before"  : false,
+            "separator_after" : true,
+            "_disabled"     : false, //(this.check("create_node", data.reference, {}, "last")),
+            "label"       : "New",
             "submenu" : {
               "file" : {
-                "separator_before"	: false,
-                "separator_after"	: false,
-                "label"				: "File",
-                "action"			: function (data) {
+                "separator_before"  : false,
+                "separator_after" : false,
+                "label"       : "File",
+                "action"      : function (data) {
                   //get jstree instance
                   var inst = $.jstree.reference(data.reference),
                       //node on which user has right-clicked
@@ -118,7 +129,8 @@ NucleusSidebar = {
                   var parent = inst.get_node(parentId);
 
                   //If the node on which user has clicked is a folder, set the parent to be that folder
-                  if(document.getElementById(obj.id).getAttribute('data-type') === 'folder') {
+                  var nodeType = obj.data.type || document.getElementById(obj.id).getAttribute('data-type');
+                  if(nodeType === 'folder') {
                     parent = obj;
                     parentId = obj.id;
                   }
@@ -130,20 +142,24 @@ NucleusSidebar = {
 
                   NucleusClient.createNewFile(newFilepath, function(err, res) {
                     if(err) {throw new Error("FILE CREATION ERROR", err);}
-                    console.log("NEW FILE NAME IS", res);
-                    var newFilename = res.split("/")[res.split("/").length - 1];
+                    var newFilename = res.split("/").reverse()[0];
                     inst.set_text(newNode, newFilename);
                     inst.set_id(newNode, res);
-                    document.getElementById(res).setAttribute("data-type", "file");
+//                    document.getElementById(res).setAttribute("data-type", "file");
+
+                    var newNodeObj = inst.get_node(newNode);
+                    newNode.data = newNode.data || {};
+                    newNode.data.type = 'file';
+                    inst.edit(newNodeObj);
                   });
                 }
               },
               "folder" : {
-                "separator_before"	: false,
-                "icon"				: false,
-                "separator_after"	: false,
-                "label"				: "Folder",
-                "action"			: function (data) {
+                "separator_before"  : false,
+                "icon"        : false,
+                "separator_after" : false,
+                "label"       : "Folder",
+                "action"      : function (data) {
                   var inst = $.jstree.reference(data.reference),
                       obj = inst.get_node(data.reference);
                   var isRootNode = (obj.parents.length === 1);
@@ -169,30 +185,38 @@ NucleusSidebar = {
                     var newFilename = res.split("/")[res.split("/").length - 1];
                     inst.set_text(newNode, newFilename);
                     inst.set_id(newNode, res);
+                    //XXX: We probably don't even need setting these data-type attrs. Probably node.data is persistent
                     document.getElementById(res).setAttribute("data-type", "folder");
+
+                    var newNodeObj = inst.get_node(newNode);
+                    newNode.data = newNode.data || {};
+                    newNode.data.type = 'folder';
+
+                    inst.edit(newNodeObj);
+                    inst.open_node(newNodeObj);
                   });
                 }
               }
             }
           },
           "rename" : {
-            "separator_before"	: false,
-            "separator_after"	: false,
-            "_disabled"			: false, //(this.check("rename_node", data.reference, this.get_parent(data.reference), "")),
-            "label"				: "Rename",
-            "action"			: function (data) {
+            "separator_before"  : false,
+            "separator_after" : false,
+            "_disabled"     : false, //(this.check("rename_node", data.reference, this.get_parent(data.reference), "")),
+            "label"       : "Rename",
+            "action"      : function (data) {
               var inst = $.jstree.reference(data.reference),
                   obj = inst.get_node(data.reference);
               inst.edit(obj);
             }
           },
           "remove" : {
-            "separator_before"	: false,
-            "icon"				: false,
-            "separator_after"	: false,
-            "_disabled"			: false, //(this.check("delete_node", data.reference, this.get_parent(data.reference), "")),
-            "label"				: "Delete",
-            "action"			: function (data) {
+            "separator_before"  : false,
+            "icon"        : false,
+            "separator_after" : false,
+            "_disabled"     : false, //(this.check("delete_node", data.reference, this.get_parent(data.reference), "")),
+            "label"       : "Delete",
+            "action"      : function (data) {
               var inst = $.jstree.reference(data.reference),
                   obj = inst.get_node(data.reference);
               var filepath = obj.id;
@@ -200,6 +224,7 @@ NucleusSidebar = {
                 if(err) { FlashMessages.sendError(err); return; }
 
                 inst.delete_node(obj);
+                Session.set('nucleus_selected_doc_id', 'scratch');
 
                 var filename = filepath.split("/")[filepath.split("/").length - 1];
                 FlashMessages.sendSuccess(filename + " Successfully Deleted.");

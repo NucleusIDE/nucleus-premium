@@ -2,76 +2,32 @@
  * # Templates
  */
 
+ReactiveVar.prototype.toggle = function() {
+  var val = this.get();
+  this.set(! val);
+};
+
+var LocalReactiveVars = {
+  shouldShowDeployForm: new ReactiveVar(false),
+  deployToMeteor: new ReactiveVar(true),
+  customDeployFormSchema: new ReactiveVar(new SimpleSchema)
+};
+
 Template.nucleus.helpers({
   showNucleus: function() {
-    console.log("NUCLEUS URL IS", NucleusClient.config.nucleusUrl);
     return true;
   }
 });
 
-
-//Set the height of sidebar to be the height of window. I couldn't get it working in CSS
-Template.nucleus_sidebar.rendered = function() {
-  $("#sidebar").height($(window).height());
-};
 //Set the maxHeight of jstree so it won't take all the space when expanded. It make a cool effect
 Template.nucleus_tree_widget.rendered = function() {
   $("#nucleus_file_tree").css({maxHeight: ($(window).height()*50)/100});
 };
-Template.nucleus_nick_prompt.rendered = function() {
-  if($.cookie('nick')) NucleusUser.new($.cookie('nick'));
 
-  //This is just a remider in case we change css in stylesheet and keyup handler in events fuck up styles on error/success
-  $("#nick").css({
-    boxShadow: "0 0 29px 0px rgba(17,153,230, 0.9)",
-    border: "1px solid rgba(17,153,230,0.5)"
-  });
-  $("#nick").focus();
-};
-
-
-
-
-
-Template.nucleus_nick_prompt.helpers({
+Template.nucleus_login_prompt.helpers({
   no_nuc_user: function() {
-    return !NucleusUser.me();
-  }
-});
-
-Template.nucleus_nick_prompt.events({
-  "blur #nick": function() {
-    $("#nick").focus();
-  },
-  "keyup #nick": function(e) {
-    e.preventDefault();
-    var $in = $("#nick"),
-        nick = $in.val(),
-        validNick = nick.length > 3 && ! NucleusUsers.findOne({nick: $in.val()}) && nick.indexOf(" ") < 0;
-
-    if($in.val() === "") {
-      $("#nick").css({
-        boxShadow: "0 0 29px 0px rgba(17,153,230, 0.9)",
-        border: "1px solid rgba(17,153,230,0.5)"
-      });
-      return false;
-    }
-
-    if (!validNick) {
-      $("#nick").css({
-        boxShadow: "0 0 29px 0px rgba(218, 61, 66, 0.9)",
-        border: "1px solid rgba(218, 61, 66,0.5)"
-      });
-    } else {
-      $("#nick").css({
-        boxShadow: "0 0 29px 0px rgba(17, 230, 179, 0.9)",
-        border: "1px solid rgba(17, 230, 179, 0.5)"
-      });
-    }
-
-    if (e.keyCode === 13 && validNick) {
-      var nucUser = NucleusUser.new(nick);
-    }
+    Session.setDefault('should_show_nucleus_login_button', true);
+    return Session.get('should_show_nucleus_login_button');
   }
 });
 
@@ -93,44 +49,38 @@ Template.nucleus_tree_widget.helpers({
   }
 });
 
-Template.editor.rendered = function() {
-  $("#nucleus_editor").height($(window).height() - 35);
-};
-
 Template.editor.config = function () {
   return function(editor) {
     // This method gets called when sharejs has initialized the ace-editor. `editor` argument here is the ace-instance provided by sharejs. We use it to initialize `NucleusEditor`
-    NucleusEditor.initilize(editor);
+    NucleusEditor.initialize(editor);
   };
 };
-
 Template.editor.setMode = function() {
   return function(editor) {
     /**
      * This function is called by sharejs whenever the document being edited in ace changes.
+     * We do not set the mode here because it is done in NucleusEditor.initialize
+     * NucleusEditor.initialize gets called everytime the doc being editted changes.
+     * This is done by sharejs, we simply change the session key for doc and sharejs
+     * changes the actual doc for us, and it does it such that editor gets initialized again,
+     * everytime
      */
-    var selectedFile = Session.get("nucleus_selected_file"),
-        extRe = /(?:\.([^.]+))?$/,
-        ext = extRe.exec(selectedFile)[1];
-    NucleusEditor.setModeForExt(ext);
+    var selectedFile = Session.get("nucleus_selected_file");
+
     //Events get unregistered on document change
     NucleusEditor.registerAllEvents();
     NucleusEditor.editor.scrollToRow(0);
-
-    //We need to re-assign the window height on document change otherwise editor falls back to height given in css.
-    //Sharejs does dom overwrite may be
-    Meteor.setTimeout(function() {
-      $("#nucleus_editor").height($(window).height() - 35);
-    }, 200);
   };
 };
 
 Template.editor.helpers({
+  is_deploying: function() {
+    return LocalReactiveVars.shouldShowDeployForm.get();
+  },
   docid: function() {
     return Session.get('nucleus_selected_doc_id') || 'scratch';
   }
 });
-
 Template.nucleus_toolbar.helpers({
   recievingEvents: function(app) {
     if (NucleusUser.me())
@@ -194,17 +144,9 @@ Template.nucleus_toolbar.events({
       else FlashMessages.sendError("Something Went Wrong While Pulling Changes");
     });
   },
-  "click #mup_deploy": function(e) {
-    var $btn = $("#mup_deploy");
-    var btnClasses = $btn.find('i').attr('class');
-    spinBtn($btn);
+  "click #nuc_deploy": function(e) {
     e.preventDefault();
-    var should_mup_setup = true;
-    Meteor.call("nucleusMupDeploy", should_mup_setup, function(err, res) {
-      unSpinBtn($btn, btnClasses);
-      if (res === 1) FlashMessages.sendSuccess("Deployed Successfully");
-      else FlashMessages.sendError("Something Went Wrong While Deploying. Please make sure you have mup.json in project root and it has correct settings.");
-    });
+    LocalReactiveVars.shouldShowDeployForm.toggle();
   },
   "click #sync_app_events": function(e) {
     e.preventDefault();
@@ -406,8 +348,7 @@ Template.nucleus_topbar.events({
     NucleusClient.editFile(selectedFile, true);
   },
   "click #nucleus_show_terminal": function() {
-    var showTerminal = Session.get("nucleus_show_terminal") || false;
-    Session.set("nucleus_show_terminal", !showTerminal);
+    NucleusClient.Terminal.toggle();
   }
 });
 ////////////////
@@ -418,9 +359,13 @@ Template.nucleus_topbar.events({
 ////////////////////
 // START TERMINAL //
 ////////////////////
-Template.nucleus_terminal.helpers({
+Template.terminal.helpers({
   show_terminal: function() {
-    return Session.get("nucleus_show_terminal");
+    // return NucleusClient.Terminal.showingTerminal.get();
+    return Session.get('nucleus_show_terminal');
+  },
+  terminal_initialized: function() {
+    return Session.get('nucleus_terminal_ready');
   }
 });
 //////////////////
@@ -444,9 +389,263 @@ Template.nucleus_ribbon.rendered = function() {
 Template.nucleus_ribbon.events({
   "click #nucleus_client_init": function(e) {
     e.preventDefault();
-    NucleusClient.initialize();
+    NucleusClient.popup();
   }
 });
 /////////////////////////
 // end nucleus ribbon  //
 /////////////////////////
+
+
+//////////////////////////
+// START VIDEO CONTROLS //
+//////////////////////////
+Template.nucleus_video_chat_controls.helpers({
+  "chat_start_stop_icon": function() {
+    if (Session.get('vibrate-chat-active')) {
+      return 'fa-stop';
+    }
+    return 'fa-video-camera';
+  }
+});
+
+Template.nucleus_video_chat_controls.events({
+  "click #start-video-chat": function(e) {
+    Session.set('webrtc-chat-active', ! Session.get('webrtc-chat-active'));
+  }
+});
+
+Template.nucleus_video_chat_film.helpers({
+  "show_video_chat_film": function() {
+    return Session.get('webrtc-chat-active');
+  }
+});
+
+Template.nucleus_video_chat_controls.rendered = function() {
+  MeteorWebrtc.on('newVideoCall', function(message) {
+    console.log(message);
+    if (message.sender === NucleusUser.me().nick) {
+      return;
+    }
+
+    Session.set('incoming_call_recieved', false);
+  });
+};
+
+//Autorun for starting/recieving/stopping a call.
+//It initializes the SimpleWebrtc and create/join/stop a video call
+//depending on Session.get('webrtc-chat-active')
+Tracker.autorun(function() {
+  var chatActive = Session.get('webrtc-chat-active');
+
+  if (chatActive) {
+    var rtcInterval = Meteor.setInterval(function() {
+      if (typeof SimpleWebRTC === 'undefined') {
+        return;
+      }
+
+      Meteor.clearInterval(rtcInterval);
+
+      window.nucleucWebrtc = new SimpleWebRTC({
+        debug: false,
+        url: 'http://localhost:8080',
+        localVideoEl: 'local-nucleus-video',
+        remoteVideosEl: 'remote-nucleus-videos',
+        autoRequestMedia: true
+      });
+
+      window.nucleucWebrtc.on('readyToCall', function () {
+        window.nucleucWebrtc.joinRoom('nucleus_room');
+
+        //broadcast message only if it is not recieving a call.
+        //Session.get('incoming_call_recieved') is set to false when an incoming
+        //call has arrived. Otherwise it is true or undefined
+        if (Session.get('incoming_call_recieved') !== false) {
+          MeteorWebrtc.broadcast('newVideoCall', {sender: NucleusUser.me().nick});
+        }
+
+        Session.set('incoming_call_recieved', true);
+      });
+    }, 100);
+  } else {
+    if (!window.nucleucWebrtc) {
+      return;
+    }
+
+    window.nucleucWebrtc.leaveRoom('nucleus_room');
+    window.nucleucWebrtc.stopLocalVideo();
+  }
+});
+
+//Autorun for dismissing/showing incoming call notification
+//depending on Session.get('incoming_call_recieved')
+Tracker.autorun(function() {
+  var callRecieved = Session.get('incoming_call_recieved');
+
+  if (typeof callRecieved === 'undefined')
+    return;
+
+  if (callRecieved == false) {
+    $('#start-video-chat').addClass('incoming-call');
+  }
+  if (callRecieved == true) {
+    $('#start-video-chat').removeClass('incoming-call');
+  }
+});
+
+////////////////////////
+// END VIDEO CONTROLS //
+////////////////////////
+
+
+/////////////////////////////////
+// START NUCLEUS MASTER PROMPT //
+/////////////////////////////////
+
+Template.nucleus_master_prompt.helpers({
+  nucleus_show_master_prompt: function() {
+    return NucleusClient.MasterPrompt.showPrompt.get();
+  },
+  results: function() {
+    if (! NucleusClient.MasterPrompt.promptOut.get().length)
+      return [];
+
+    var res = NucleusClient.MasterPrompt.promptOut.get().map(function(item, index) {
+      return _.extend(item, {index: index});
+    });
+
+    return res;
+  },
+  selected_item_class: function() {
+    var className = 'nucleus-master-prompt-active';
+    return this.index == NucleusClient.MasterPrompt.selectedPromptItem.get() ? className : '';
+  }
+});
+
+Template.nucleus_master_prompt.events({
+  'keyup #nucleus-master-prompt-input': function(e) {
+    e.preventDefault();
+
+    var special_keys = [
+      27, //esc
+      9, //'tab'
+      38, //up
+      40, //down
+      37, //left
+      39, //right
+    ];
+
+    switch(e.keyCode) {
+    case 27:
+      NucleusClient.MasterPrompt.hidePrompt();
+      break;
+    case 38:
+      NucleusClient.MasterPrompt.selectedPromptItem.dec();
+      break;
+    case 40:
+      NucleusClient.MasterPrompt.selectedPromptItem.inc();
+      break;
+    case 13:
+      var selectedVal = NucleusClient.MasterPrompt.promptOut.get()[NucleusClient.MasterPrompt.selectedPromptItem.get()].value;
+      NucleusClient.MasterPrompt.itemSelected(selectedVal);
+      NucleusClient.MasterPrompt.hidePrompt();
+      break;
+    }
+
+    if (_.contains(special_keys, e.keyCode)) {
+      return;
+    }
+
+    var val = e.currentTarget.value;
+    NucleusClient.MasterPrompt.promptIn.set(val);
+  },
+  'click .nucleus-master-prompt li': function(e) {
+    e.preventDefault();
+    NucleusClient.MasterPrompt.itemSelected(e.currentTarget.getAttribute('data-value'));
+    NucleusClient.MasterPrompt.hidePrompt();
+  }
+});
+
+/////////////////////////////////
+//  END NUCLEUS MASTER PROMPT //
+/////////////////////////////////
+
+///////////////////////
+// START DEPLOY FORM //
+///////////////////////
+
+Template.nucleus_deploy_form.helpers({
+  deploying_to_meteor: function() {
+    return LocalReactiveVars.deployToMeteor.get();
+  },
+  meteorDeployClass: function() {
+    return LocalReactiveVars.deployToMeteor.get() ? 'nucleus-deploy-active' : '';
+  },
+  customDeployClass: function() {
+    return LocalReactiveVars.deployToMeteor.get() ? '' : 'nucleus-deploy-active';
+  }
+});
+Template.nucleus_deploy_form.events({
+  "click .meteor-deploy": function(e) {
+    LocalReactiveVars.deployToMeteor.set(true);
+  },
+  "click .custom-deploy": function(e) {
+    LocalReactiveVars.deployToMeteor.set(false);
+    NucleusClient.Deploy.getMupSimpleSchema(function(err, mupSchema) {
+      if (err) {
+        console.log("Error while getting Mup.json schema", err);
+        return err.message;
+      }
+      console.log("SCHEMA IS", mupSchema);
+      LocalReactiveVars.customDeployFormSchema.set(mupSchema);
+    });
+  },
+  "click .nucleus-deploy-form-submit-button, submit #deploy-form": function(e) {
+    e.preventDefault();
+
+    var activeForm = LocalReactiveVars.deployToMeteor.get() ? 'meteor' : 'mup',
+        options = {};
+
+    if (activeForm === 'meteor') {
+      options.subdomain = document.getElementById("nucleus-deploy-subdomain").value.trim();
+
+      if (Utils.isEmpty(options)) {
+        FlashMessages.sendError("Please Fill all fields");
+        return false;
+      }
+    }
+
+    NucleusClient.Deploy.sendDeployCommand(activeForm, options);
+  }
+});
+
+Template.deploy_form_custom.helpers({
+  formSchema: function() {
+    var schema = LocalReactiveVars.customDeployFormSchema.get();
+    return schema;
+  }
+});
+
+AutoForm.hooks({
+  'customDeployForm': {
+    onSubmit: function(insertDoc, updateDoc, currentDoc) {
+      var mup = insertDoc;
+      _.each(mup, function(val, prop) {
+        insertDoc[prop] = JSON.parse(val);
+      });
+
+      Meteor.call("nucleusSaveMupJson", mup, function(err, res) {
+        if (err)
+          throw new Meteor.Error("Error while saving mup", err);
+
+        console.log("Launching terminal and sending mup command");
+      });
+
+      return false;
+    }
+  }
+});
+
+//////////////////////
+// END DEPLOY FORM  //
+//////////////////////

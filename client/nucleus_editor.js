@@ -74,7 +74,9 @@ var NucleusEditorFactory = function() {
     'css': 'css',
     'json': 'json',
     'js': 'javascript',
-    'lock': 'json'
+    'lock': 'json',
+    'less': 'less',
+    'sass': 'sass'
   };
   //This part might be over-engineered, or might not be. Objective was to have a singular point for all the events that we have on the ace-editor
   this.events = {
@@ -89,10 +91,16 @@ var NucleusEditorFactory = function() {
   /**
    * We initialize the `NucleusEditor` in template.js when we get ace-editor instance from shareJs
    */
-  this.initilize = function(aceInstance) {
+  this.initialize = function(aceInstance) {
     this.setEditor(aceInstance);
     this.setTheme('monokai');
-    this.setMode('javascript');
+
+    var filepath = Session.get("nucleus_selected_file");
+    if(filepath) {
+      var ext = filepath.split('.').reverse()[0];
+      this.setModeForExt(ext);
+    }
+
     //Highlighting active line would make the extra cursors disappear from that line.
     this.editor.setHighlightActiveLine(false);
     //Some basic commands
@@ -125,6 +133,9 @@ var NucleusEditorFactory = function() {
   };
 
   this.setMode = function(mode) {
+    if (typeof mode == 'undefined')
+      mode = 'text';
+
     this.getSession().setMode("ace/mode/"+ mode);
   };
   this.setTheme = function(theme) {
@@ -142,8 +153,10 @@ var NucleusEditorFactory = function() {
   };
   //This method is used for setting the mode of document on every doc change
   this.setModeForExt = function(ext) {
-    ext = ext || "js";
-    var mode = this.aceModesForExts[ext] || ext;
+    if (!ext)
+      return;
+
+    var mode = this.aceModesForExts[ext] || 'text';
     this.setMode(mode);
   };
 
@@ -286,7 +299,7 @@ var NucleusEditorFactory = function() {
     background-color: " + color + ";\
     border-left: 2px solid "+ color + ";\
     animation: nuc-blink 0.8s steps(5, start) infinite; \
-    -webkit-animation: nuc-blink 0.8s steps(5, start) infinite; \
+      -webkit-animation: nuc-blink 0.8s steps(5, start) infinite; \
   }";
     //Check documentation for `NucleusEditor.addStyleRule()`
     this.addStyleRule(cursorCss);

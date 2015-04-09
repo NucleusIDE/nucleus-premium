@@ -153,5 +153,23 @@ Utils = {
         return '...' + str.substr(str.length-(max-3), max);
     }
     return str;
+  },
+  getExt: function(filepath) {
+    var splitArr = filepath.split('.').reverse();    //if there was no `.` in filepath, it will still return an array of length 1
+
+    if (splitArr.length > 1) {
+      return splitArr[0];
+    }
+
+    return null;
+  },
+  isEmpty: function(str) {
+    /**
+     * Return if str is empty. If str is an object, return if any of its keys is empty
+     */
+    if (R.type(str) === 'Object')
+      return R.values(str).length ? R.any(R.isEmpty)(R.values(str)) : false;
+
+    return R.isEmpty(str);
   }
 };

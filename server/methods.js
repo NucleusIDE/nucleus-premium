@@ -7,9 +7,8 @@
 
 Meteor.methods({
   nucleusGetFileList: function() {
-    return Nucleus.getDirTree({rootDir: Nucleus.config.projectDir, parent: "#"});
+    return Nucleus.getDirTree({rootDir: Nucleus.config.projectDir, parent: "#", traverseSymlinks: true});
   },
-
   nucleusGetFileContents: function(filepath) {
     /**
      * Has equivalent `Nucleus.getFileContents(filepath)`. Shall be replaced with it in next refactoring.
@@ -26,7 +25,6 @@ Meteor.methods({
     });
     return fut.wait();
   },
-
   nucleusSaveDocToDisk: function(docId) {
     /**
      * Saves the doc (the changes made in the ace editor) back to the filesystem. Like any other method containing any code in this file, this should be moved to `Nucleus`
@@ -47,25 +45,24 @@ Meteor.methods({
       //check if the new changes have been made in the editor or user is just being a dick
       if (_.isEqual(contents, newContents)) {
         console.log("NO NEW CHANGES TO SAVE");
-        fut.return(0);
+        fut.return({status: 0});
         return fut.wait();
       }
 
       fs.writeFile(filepath, newContents, function(err) {
         if(err) {
           console.log("ERROR OCCURED WHEN WRITING FILE",err);
-          fut.return(-1);
+          fut.return({status: -1});
         }
         else {
           console.log("FILE SAVED SUCCESSFULLY");
-          fut.return(1);
+          fut.return({status: 1, oldDocContent: contents});
         }
       });
     });
 
     return fut.wait();
   },
-
   nucleusSetupFileForEditting: function(filepath, forceRefresh) {
     /**
      * Sets up `filepath` for editing. It would fetch the contents of the file from the filesystem and put them in a sharejs doc and return the `docId` of newly created doc.
@@ -141,9 +138,6 @@ Meteor.methods({
   nucleusPullChanges: function(selectedFile) {
     return Nucleus.pullChanges(selectedFile);
   },
-  nucleusGetAllCSS: function(options) {
-    return Nucleus.getAllCSS(options);
-  },
   nucleusMupDeploy: function(mup_setup) {
     return Nucleus.mupDeploy(mup_setup);
   },
@@ -158,5 +152,19 @@ Meteor.methods({
   },
   nucleusRenameFile: function(oldpath, newpath) {
     return Nucleus.renameFile(oldpath, newpath);
+  },
+  nucleusIsTerminalConfigured: function() {
+    return Nucleus.config.terminalInitialized;
+  },
+  nucleusCheckUserToken: function(userinfo) {
+    var username = userinfo.username,
+        loginToken = userinfo.login_token;
+
+    var nucUser = NucleusUsers.findOne({username: username});
+
+    if (!nucUser)
+      return false;
+
+    return nucUser.hasValidLoginToken(loginToken);
   }
 });
