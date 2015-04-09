@@ -40,6 +40,7 @@ Package.on_use(function (api, where) {
     'client/plugins/master-prompt.js',
     'client/plugins/fuzzy-find-file.js',
     'client/plugins/nucleus-terminal.js',
+    'client/plugins/webrtc-call.js',
   ], 'client');
 
   api.add_files([

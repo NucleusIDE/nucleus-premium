@@ -7,6 +7,7 @@ NucleusPluginManager = function(NucleusInstance) {
       MasterPrompt,  //depends on Keybindings
       FuzzyFindFile, //depends on MasterPrompt
       NucleusTerminal,
+      WebRTCCall,
     ];
   }
 
