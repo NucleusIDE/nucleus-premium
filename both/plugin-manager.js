@@ -1,5 +1,5 @@
-NucleusPluginManager = function(NucleusClient) {
-  this.NucleusClient = NucleusClient;
+NucleusPluginManager = function(NucleusInstance) {
+  this.NucleusInstance = NucleusInstance;
 
   if (Meteor.isClient) {
     this._corePlugins = [
@@ -11,7 +11,9 @@ NucleusPluginManager = function(NucleusClient) {
   }
 
   if (Meteor.isServer) {
-    this._corePlugins = [];
+    this._corePlugins = [
+      BasicAuth
+    ];
   }
 
   this._registeredPlugins = [];
@@ -27,7 +29,7 @@ NucleusPluginManager.prototype.registerPlugin = function(plugin) {
   }
 
   if (_.isFunction(plugin)) {
-    pluginObj = new plugin(this.NucleusClient);
+    pluginObj = new plugin(this.NucleusInstance);
   }
 
   if (! _.isObject(pluginObj)) {
@@ -40,7 +42,7 @@ NucleusPluginManager.prototype.registerPlugin = function(plugin) {
 
   //Register a plugin only once.
   if (this._registeredPlugins.indexOf(plugin) < 0) {
-    pluginObj.exec(this.NucleusClient);
+    pluginObj.exec(this.NucleusInstance);
     this._registeredPlugins.push(plugin);
   }
 };

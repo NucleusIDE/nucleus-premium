@@ -43,6 +43,10 @@ Package.on_use(function (api, where) {
   ], 'client');
 
   api.add_files([
+    'server/plugins/basic-auth.js'
+  ], 'server');
+
+  api.add_files([
     'public/logo.png',
   ], 'client', {isAsset: true});
 
