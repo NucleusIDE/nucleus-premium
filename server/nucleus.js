@@ -67,20 +67,23 @@ var NucleusFactory = function() {
     var pathParts = process.env.PWD.split('/');
     Nucleus.config.project = pathParts[pathParts.length - 1];
     //Nucleus.config.projectDir = path.join(homeDir, ".nucleus/",Nucleus.config.project);
+
+    this.BasicAuth.addAuth(this);
   };
 
   //This method is called on nucleus initialization on the server (in the app).
   this.initialize = function(config) {
-    config && this.configure(config);
-
-    //this.nucleusCloneRepo();
-    this.Deploy = new DeployManager();
-
     /**
      * Add Plugin manager to Nucleus and put 'registerPlugin' on this for convinience
      */
     this.PluginManager = new NucleusPluginManager(this);
     this.registerPlugin = this.PluginManager.registerPlugin.bind(this.PluginManager);
+
+    config && this.configure(config);
+
+    //this.nucleusCloneRepo();
+    this.Deploy = new DeployManager();
+
 
     if(this.config.preventAppCrashes)
       CrashWatcher.initialize();
